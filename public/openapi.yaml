@@ -1,0 +1,295 @@
+openapi: 3.0.3
+info:
+  title: Product Inventory Management System
+  version: 1.0.0
+  description: |
+    REST API for managing products, categories and suppliers.
+
+    Register or log in to get a token, then click **Authorize**
+
+servers:
+  - url: /api
+
+tags:
+  - name: Auth
+  - name: Products
+  - name: Lookups
+
+paths:
+  /register:
+    post:
+      tags: [Auth]
+      summary: Create an account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password, password_confirmation]
+              properties:
+                name: { type: string, example: Jane Doe }
+                email: { type: string, format: email, example: jane@example.com }
+                password: { type: string, minLength: 8, example: password }
+                password_confirmation: { type: string, example: password }
+      responses:
+        '201':
+          description: Account created
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /login:
+    post:
+      tags: [Auth]
+      summary: Log in and get a token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email, example: test@example.com }
+                password: { type: string, example: password }
+      responses:
+        '200':
+          description: Logged in
+        '401':
+          description: Wrong email or password
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /logout:
+    post:
+      tags: [Auth]
+      summary: Revoke the token used for this request
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Logged out
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+
+  /products:
+    get:
+      tags: [Products]
+      summary: List products (filterable, paginated)
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: search, in: query, description: Matches name or SKU, schema: { type: string } }
+        - { name: category_id, in: query, schema: { type: integer } }
+        - { name: min_price, in: query, schema: { type: number } }
+        - { name: max_price, in: query, schema: { type: number } }
+        - { name: min_stock, in: query, schema: { type: integer } }
+        - { name: max_stock, in: query, schema: { type: integer } }
+        - { name: in_stock, in: query, description: "1 = only products with stock > 0", schema: { type: integer, enum: [0, 1] } }
+        - { name: low_stock, in: query, description: "1 = only products with stock of 10 or less", schema: { type: integer, enum: [0, 1] } }
+        - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 15 } }
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+      responses:
+        '200':
+          description: A page of products
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    post:
+      tags: [Products]
+      summary: Create a product
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductInput'
+      responses:
+        '201':
+          description: Product created
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /products/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Products]
+      summary: Get one product
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The product
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Products]
+      summary: Update a product (send only the fields that changed)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductInput'
+      responses:
+        '200':
+          description: Product updated
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    patch:
+      tags: [Products]
+      summary: Same as PUT
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductInput'
+      responses:
+        '200':
+          description: Product updated
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    delete:
+      tags: [Products]
+      summary: Soft delete a product
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Deleted
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /categories:
+    get:
+      tags: [Lookups]
+      summary: List all categories (cached for an hour)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: All categories
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+
+  /suppliers:
+    get:
+      tags: [Lookups]
+      summary: List all suppliers (cached for an hour)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: All suppliers
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+
+  responses:
+    Unauthenticated:
+      description: Missing or invalid token
+    NotFound:
+      description: Resource not found (soft deleted products count as not found)
+    TooManyRequests:
+      description: Rate limit hit, wait a minute
+    ValidationError:
+      description: Validation failed
+  schemas:
+    AuthResponse:
+      type: object
+      properties:
+        user:
+          type: object
+          properties:
+            id: { type: integer }
+            name: { type: string }
+            email: { type: string }
+        token: { type: string }
+
+    Category:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        description: { type: string, nullable: true }
+
+    Supplier:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        email: { type: string }
+        phone: { type: string, nullable: true }
+
+    Product:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        sku: { type: string, example: USB-100 }
+        description: { type: string, nullable: true }
+        price: { type: number, example: 12.5 }
+        formatted_price: { type: string, example: "$12.50" }
+        stock: { type: integer }
+        is_low_stock: { type: boolean }
+        category:
+          $ref: '#/components/schemas/Category'
+        suppliers:
+          type: array
+          items:
+            $ref: '#/components/schemas/Supplier'
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    ProductEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/Product'
+
+    ProductInput:
+      type: object
+      required: [category_id, name, sku, price, stock]
+      properties:
+        category_id: { type: integer, example: 1 }
+        name: { type: string, example: USB-C Cable }
+        sku: { type: string, example: USB-100 }
+        description: { type: string, nullable: true }
+        price: { type: number, example: 12.5 }
+        stock: { type: integer, example: 25 }
+        supplier_ids:
+          type: array
+          items: { type: integer }
+          example: [1, 2]
